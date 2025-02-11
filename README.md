@@ -16,6 +16,9 @@ La aplicación **GeoDataRecollector** es una herramienta diseñada para registra
 
 ---
 
+<img src="https://github.com/user-attachments/assets/4ce91649-b70f-41f3-9fdb-9910e2aafaf9" alt="Img1" height="600">
+<img src="https://github.com/user-attachments/assets/29787b30-b1c4-43ee-a4de-fe63723c1d5a" alt="Img2" height="600">
+
 ### 2. Configuración de Parámetros
 
 - **Intervalo de Captura**: En la parte superior (o en una sección dedicada) se dispone de un campo de texto que permite ajustar el **intervalo de grabación** en segundos. Este intervalo determina cada cuántos segundos la aplicación guardará un nuevo registro (timestamp, latitud, longitud, velocidad).
