@@ -1,0 +1,1 @@
+C:\Users\randy\OneDrive\Documentos\UnityProjects\GeoDataCollection\Library\Bee\Android\Prj\Mono2x\Gradle\unityLibrary\build\intermediates\cxx\RelWithDebInfo\53s6o6se\obj\armeabi-v7a

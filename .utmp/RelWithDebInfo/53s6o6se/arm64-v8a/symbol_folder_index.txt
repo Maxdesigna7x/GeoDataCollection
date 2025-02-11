@@ -1,0 +1,1 @@
+C:\Users\randy\OneDrive\Documentos\UnityProjects\GeoDataCollection\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\build\intermediates\cxx\RelWithDebInfo\53s6o6se\obj\arm64-v8a

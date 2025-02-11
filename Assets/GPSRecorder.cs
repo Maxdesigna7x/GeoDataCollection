@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Events;
+using UnityEngine.UI;
 using TMPro;
 using System.IO;
 using System;
@@ -11,7 +13,7 @@ using UnityEngine.Android;
 public class GPSRecorder : MonoBehaviour
 {
     // Bandera para indicar si se está grabando.
-    private bool isRecording = false;
+    public bool isRecording = false;
 
     // Lista para almacenar las líneas del CSV (incluye la cabecera).
     private List<string> csvData = new List<string>();
@@ -25,10 +27,18 @@ public class GPSRecorder : MonoBehaviour
     // Nombre del archivo CSV.
     [SerializeField] private string fileName = "GPSData.csv";
 
+    [SerializeField] private TextMeshProUGUI speedText;
+
+    [SerializeField]TMP_InputField intervalInput;
+    [SerializeField]TMP_InputField dataLimitImput;
+
     private void Start()
     {
         // Agrega la cabecera al CSV.
-        csvData.Add("Timestamp,Latitude,Longitude,Altitude");
+        csvData.Add("Timestamp,Latitude,Longitude,Velocity");
+        LoadRecordCount();
+        dataLimitImput.text = maxChildren.ToString();
+        intervalInput.text = recordInterval.ToString();
 
         // Solicita los permisos necesarios en Android.
 #if UNITY_ANDROID
@@ -68,7 +78,7 @@ public class GPSRecorder : MonoBehaviour
         }
 
         // Inicia el servicio de ubicación.
-        Input.location.Start();
+        Input.location.Start(1f, 0.5f);
 
         // Espera a que el servicio se inicialice (máximo 20 segundos).
         int maxWait = 20;
@@ -99,11 +109,54 @@ public class GPSRecorder : MonoBehaviour
         }
     }
 
+    public void SetInterval()
+    {
+        int Input = int.Parse(intervalInput.text);
+        
+        if(Input > 1)
+        {
+            recordInterval = Input;
+            intervalInput.text = recordInterval.ToString();
+        }else
+        {
+            intervalInput.text = "";
+        }
+        
+    }
+    public void SetDataLitit()
+    {
+        int Input = int.Parse(dataLimitImput.text);
+        if(Input > 1)
+        {
+            DestroyAllChildren();
+            maxChildren = Input;            
+            dataLimitImput.text = maxChildren.ToString(); 
+        }else
+        {
+            dataLimitImput.text = maxChildren.ToString(); 
+        }      
+    }
+
+    public void OnPush()
+    {
+        if (isRecording)
+        {
+            StopRecording();
+        }
+        else
+        {
+            StartRecording();
+        }
+    }
+
     /// <summary>
     /// Coroutine que registra la posición y el tiempo cada cierto intervalo.
     /// </summary>
     IEnumerator RecordLocation()
     {
+        // Primero, carga los datos existentes.
+        LoadCSVData();
+        
         while (isRecording)
         {
             if (Input.location.status == LocationServiceStatus.Running)
@@ -113,12 +166,15 @@ public class GPSRecorder : MonoBehaviour
 
                 // Obtiene los datos de ubicación.
                 float latitude = Input.location.lastData.latitude;
-                float longitude = Input.location.lastData.longitude;
-                float altitude = Input.location.lastData.altitude;
+                float longitude = Input.location.lastData.longitude;                
+                float velocity = CalculateSpeed(latitude, longitude);
 
                 // Agrega una línea al CSV.
-                string line = string.Format("{0},{1},{2},{3}", timestamp, latitude, longitude, altitude);
+                string line = string.Format("{0},{1},{2},{3}", timestamp, latitude, longitude, velocity);
                 csvData.Add(line);
+                IncrementRecordCount();
+                InstantiateRecordUI(timestamp, latitude, longitude, velocity);
+                speedText.text = velocity.ToString("F2") + " m/s";
 
                 Debug.Log("Registrado: " + line);
             }
@@ -129,6 +185,43 @@ public class GPSRecorder : MonoBehaviour
             yield return new WaitForSeconds(recordInterval);
         }
     }
+
+    // Variable para contar el número de registros tomados.
+    private int recordCount = 0;
+
+    /// <summary>
+    /// Incrementa el contador de registros y devuelve la cantidad total de registros tomados hasta ahora.
+    /// </summary>
+    public int GetRecordCount()
+    {
+        return recordCount;
+    }
+
+    /// <summary>
+    /// Llama a este método cada vez que se registra un nuevo dato del GPS.
+    /// Incrementa el contador de registros, lo guarda en PlayerPrefs y devuelve la cantidad total de registros tomados hasta ahora.
+    /// </summary>
+    private void IncrementRecordCount()
+    {
+        recordCount++;
+        SaveRecordCount();
+    }
+    /// <summary>
+    /// Guarda el número de registros en PlayerPrefs.
+    /// </summary>
+    private void SaveRecordCount()
+    {
+        PlayerPrefs.SetInt("RecordCount", recordCount);
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>
+    /// Carga el número de registros almacenado en PlayerPrefs al iniciar.
+    /// </summary>
+    private void LoadRecordCount()
+    {
+        recordCount = PlayerPrefs.GetInt("RecordCount", 0);
+    }  
 
     /// <summary>
     /// Llamar a este método para detener la grabación.
@@ -198,6 +291,44 @@ public class GPSRecorder : MonoBehaviour
         return timeDiff > 0 ? (float)(distance / timeDiff) : 0f;
     }
 
+    /// <summary>
+    /// Este método carga los datos existentes del CSV en la lista 'csvData'.
+    /// Si el archivo ya existe, se leen sus líneas; de lo contrario, se crea la cabecera.
+    /// </summary>
+    private void LoadCSVData()
+    {
+        string filePath = Path.Combine(Application.persistentDataPath, fileName);
+        if (File.Exists(filePath))
+        {
+            // Carga todas las líneas existentes en csvData.
+            csvData = new List<string>(File.ReadAllLines(filePath));
+        }
+        else
+        {
+            // Si no existe, inicializa la lista y agrega la cabecera.
+            csvData = new List<string>();
+            csvData.Add("Timestamp,Latitude,Longitude,Velocity");
+        }
+    }
+
+    public void DeleteLocalCSV()
+    {
+        // Ruta completa del archivo CSV.
+        string filePath = Path.Combine(Application.persistentDataPath, fileName);
+        
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+            Debug.Log("Archivo CSV eliminado de: " + filePath);
+            
+            // Reinicia la lista de datos con la cabecera.
+            csvData = new List<string> { "Timestamp,Latitude,Longitude,Velocity" };
+        }
+        else
+        {
+            Debug.Log("No se encontró archivo CSV en: " + filePath);
+        }
+    }
 
     /// <summary>
     /// Exporta el CSV guardándolo en la carpeta local y copiándolo a la carpeta de descargas en Android.
@@ -222,10 +353,95 @@ public class GPSRecorder : MonoBehaviour
         }
         catch (Exception e)
         {
-            Debug.Log("Error exportando el CSV: " + e.Message);
+            Debug.Log("Error exportan doel CSV: " + e.Message);
         }
 #else
         Debug.Log("La exportación a carpeta de descargas solo funciona en dispositivos Android.");
 #endif
     }
+
+    // Asegúrate de tener asignado en el Inspector el prefab y el contenedor donde se instanciarán los elementos.
+    public GameObject recordPrefab;   // Prefab que contiene los TMP para cada valor.
+    public Transform recordsParent;   // Contenedor (por ejemplo, un panel) donde se agregarán los elementos instanciados.
+
+    /// <summary>
+    /// Instancia un objeto (a partir de un prefab) y asigna los valores de la información del registro  
+   
+    public void InstantiateRecordUI(string timestamp, float latitude, float longitude, float velocity)
+    {
+        // Instanciar el prefab como hijo del contenedor asignado.
+        GameObject recordInstance = Instantiate(recordPrefab, recordsParent);
+        recordInstance.transform.SetAsFirstSibling(); // Para que se muestren en orden descendente.
+        LimitChildren();
+
+        // Obtener el componente RecordUI del prefab (debe tener las referencias a los TMP).
+        RecordUI recordUI = recordInstance.GetComponent<RecordUI>();
+
+        if (recordUI != null)
+        {
+            // Asignar los valores a cada TMP.
+            recordUI.timestampTMP.text = timestamp;
+            recordUI.latitudeTMP.text = latitude.ToString("F6");    // 6 decimales para mayor precisión.
+            recordUI.longitudeTMP.text = longitude.ToString("F6");
+            recordUI.velocityTMP.text = velocity.ToString("F2");      // 2 decimales para la altitud.
+        }
+        else
+        {
+            Debug.LogError("El prefab no contiene el componente RecordUI con las referencias a los TMP.");
+        }
+    }
+
+    [SerializeField] private int maxChildren = 10;
+
+    public void LimitChildren()
+    {
+        if (recordsParent == null)
+        {
+            Debug.LogWarning("Parent transform is not assigned!");
+            return;
+        }
+
+        int childCount = recordsParent.childCount;
+
+        if (childCount > maxChildren)
+        {
+            int childrenToRemove = childCount - maxChildren;
+
+            for (int i = 0; i < childrenToRemove; i++)
+            {
+                Transform childToRemove = recordsParent.GetChild(recordsParent.childCount - 1);
+                Destroy(childToRemove.gameObject);
+            }
+        }
+    }
+    public void DestroyAllChildren()
+    {
+        if (recordsParent == null)
+        {
+            Debug.LogWarning("Parent transform is not assigned!");
+            return;
+        }
+
+        // Copia de todos los hijos en una lista temporal
+        List<GameObject> children = new List<GameObject>();
+        foreach (Transform child in recordsParent)
+        {
+            children.Add(child.gameObject);
+        }
+
+        // Itera por la lista y destruye cada objeto
+        foreach (GameObject child in children)
+        {
+            Destroy(child);
+        }
+    }
+
+
+    // Optional: Button to trigger the destruction in the inspector
+    [ContextMenu("Destroy All Children")]
+    public void DestroyAllChildrenButton()
+    {
+        DestroyAllChildren();
+    }
+
 }
